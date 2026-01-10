@@ -7,136 +7,112 @@ from rasterio import features
 import pyflwdir
 from shapely.ops import nearest_points
 import pandas as pd
-import rioxarray
 import geopandas as gpd
 import pandas as pd
 from shapely.ops import linemerge, unary_union
 import rasterio
 from rasterio.io import MemoryFile
+import rioxarray
 import requests
-import branca.colormap as cm
 from utils import *
 
-def get_dem(bounds,
-            asset_url : str = None,
-            key_opentopo : str = None,
-            save_dem_raster : bool = False,
-            output_dir : str = None,
-            file_name : str = 'dem'):
+import rioxarray
+
+
+from rasterio.enums import Resampling
+
+def get_dem(bounds, key_opentopo=None, 
+            save_dem_raster=False, output_dir=None, file_name='dem'):
+    """
+    Get DEM data from a web service, with fallback to OpenTopography.
+
+    bounds: [xmin, ymin, xmax, ymax] bounding box
+    key_opentopo: API key for OpenTopography
+    save_dem_raster: Whether to save the DEM as a GeoTIFF
+    output_dir: Output directory (defaults to ./outputs)
+    file_name: Output filename without extension
+        
+    Returns:
+        tuple: (dem_data, dem_meta) or None if failed
+    """
     
-    """
-    Get DEM data a final end point from a WMS Service.
-    Standard = from Global Asset (OpenLandMap STAC), 30m resolution, cropped by the bounding box of your interest
-
-    bounds = [xmin, ymin, xmax, ymax]
-    asset_url = end point URL for a raster in a webMapService
-    resample_spatial_res = desired spatial resolution, in meters
-    """
-
-    if output_dir is None and os.path.isdir(os.path.join(os.getcwd(), 'outputs')):
+    # Setup output directory
+    if output_dir is None:
         output_dir = os.path.join(os.getcwd(), 'outputs')
-    elif output_dir is None:
-        os.mkdir(os.path.join(os.getcwd(), 'outputs'))
-        output_dir = os.path.join(os.getcwd(), 'outputs')
-
-    # # Asset: global DSM 30m resolution data (OpenLandMap STAC / Copernius DEM digital surface model / dsm_glo30_20110101_20151231)
-    #     asset_url = "https://s3.openlandmap.org/arco/dsm_glo30_m_30m_s_20110101_20151231_go.epsg.4326_v20211004.tif"
- 
-    if not asset_url:
-        asset_url = "https://s3.openlandmap.org/arco/dsm_glo30_m_30m_s_20110101_20151231_go.epsg.4326_v20211004.tif"
-
-
-    # First try to Get DEM from Open Land Map
-    print(f'Attempting to load DEM from {asset_url}.')
-    try:
-        data = rioxarray.open_rasterio(asset_url, masked=True)
-        dem_data = data.rio.clip_box(*bounds)
-
-        crs = dem_data.rio.crs
-        min = dem_data.min()
-        max = dem_data.max()
-
-        if save_dem_raster:    
-            print("Writing DEM file.")
-            try:
-
-                print(f"CRS: {crs}.")
-                print(f"Data range: {float(min):.2f}m to {float(max):.2f}m.")
-
-                file_path = os.path.join(output_dir, f'{file_name}.tif')
-
-                dem_data.rio.to_raster(file_path)
-                return dem_data
-                    
-            except Exception as e:
-                print(f"Failed to write file: {e}")
-
-    except Exception as e:
-        print(f"Failed to get DEM on Open Land Map {asset_url}: {e}")
-
-        if key_opentopo:
-            # If failed, the DEM will be requested to Open Topography
-            print("Attempting connection on Open Topography.")
-            try:
-                asset_url = 'https://portal.opentopography.org/API/globaldem'
-
-                west, south, east, north = bounds.astype(str)
-                params = {
-                    "accept": "*/*",
-                    "demtype": "SRTMGL3",
-                    "south": south,
-                    "north": north,
-                    "west": west,
-                    "east": east,
-                    "outputFormat": "GTiff",
-                    "API_Key": key_opentopo
-                    }
-            
-                response = requests.get(asset_url, params=params)
-                asset_url = response.url
-
-                # data = rioxarray.open_rasterio(asset_url, masked=True)
-                # dem_data = data.rio.clip_box(*bounds)
-                
-                print(f'Attempting to load DEM from {asset_url}.')
-                with MemoryFile(response.content) as memfile:
-                    with memfile.open() as src:
-                        dem_data = src.read()
-                        dem_meta = src.meta.copy()
-                        crs = src.crs
-                        nodata = src.nodata
-                        transform = src.transform
-                min = dem_data.min()
-                max = dem_data.max()
-                
-                dem_meta.update({
-                "transform": transform,
-                "driver":"GTiff",
-                "height": dem_data.shape[1],
-                "width": dem_data.shape[2],
-                "nodata": nodata})
-
-            except Exception as e:
-                print(f'Failed to get DEM on Open Topography: {e}')
-                return None
-            
-
-    if save_dem_raster:    
-        print("Writing DEM file.")
+        os.makedirs(output_dir, exist_ok=True)
+    
+    # Attempt to retrieve data from OpenTopography 
+    dem_data = _load_from_opentopo(bounds, key_opentopo)
+    
+    if dem_data is None:
+        print("Failed to retrieve DEM from all sources.")
+        return None
+    
+    # Print metadata
+    crs = dem_data.rio.crs
+    data_min, data_max = dem_data.min(), dem_data.max()
+    print(f"CRS: {crs}")
+    print(f"Data range: {data_min:.2f}m to {data_max:.2f}m")
+    
+    # Save if requested
+    if save_dem_raster:
+        file_path = os.path.join(output_dir, f'{file_name}.tif')
+        """Save raster data to file."""
+        print(f"Saving DEM to {file_path}")
         try:
-
-            print(f"CRS: {crs}.")
-            print(f"Data range: {float(min):.2f}m to {float(max):.2f}m.")
-
-            file_path = os.path.join(output_dir, f'{file_name}.tif')
-
-            with rasterio.open(file_path, "w", **dem_meta) as dst:
-                dst.write(dem_data)
-                
+            dem_data.rio.to_raster(file_path)
         except Exception as e:
-            print(f"Failed to write file: {e}")
-
+            print(f"Failed to save file: {e}")
+ 
     return dem_data
+
+
+def _load_from_opentopo(bounds, api_key, target_crs="EPSG:3857", resolution=120, method="nearest"):
+    """Load DEM from OpenTopography API and return as rioxarray with target CRS and resolution."""
+    print('Attempting to load DEM from OpenTopography.')
+    try:
+        west, south, east, north = map(str, bounds)
+        params = {
+            "demtype": "SRTMGL3",
+            "south": south,
+            "north": north,
+            "west": west,
+            "east": east,
+            "outputFormat": "GTiff",
+            "API_Key": api_key
+        }
+        
+        method_map = {
+            "nearest": Resampling.nearest,
+            "bilinear": Resampling.bilinear,
+            "cubic": Resampling.cubic,
+            "average": Resampling.average
+        }
+
+        url = 'https://portal.opentopography.org/API/globaldem'
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        
+        with MemoryFile(response.content) as memfile:
+            with memfile.open() as src:
+                # Read directly as rioxarray
+                dem_raster = rioxarray.open_rasterio(src, masked=True)
+                # Load into memory to avoid issues when MemoryFile closes
+                dem_raster = dem_raster.load()
+
+                # Reproject and resample to target CRS and resolution
+                print('Resampling and reprojecting raster.')
+                dem_raster = dem_raster.rio.reproject(
+                    target_crs,
+                    resolution=resolution,
+                    resampling=method_map.get(method, Resampling.bilinear)
+                )
+                
+        return dem_raster
+    
+    except Exception as e:
+        print(f'Failed to load from OpenTopography: {e}')
+        return None
 
 
 # convenience method for vectorizing a raster
@@ -176,13 +152,14 @@ def pyflwdir_subbasins_minarea(
     gdf = geopandas dataframe of the larger sub_basin
     depth = depth of sub_basin delineating scale (the higher, the smaller and more numerous are the basins)
     min_sto = Minimum Strahler Order recognized as river, by the default 4.
+    output_dir: Output directory (defaults to ./outputs)
+    file_name: Output filename without extension
     """
 
-    if output_dir is None and os.path.isdir(os.path.join(os.getcwd(), 'outputs')):
+    # Setup output directory
+    if output_dir is None:
         output_dir = os.path.join(os.getcwd(), 'outputs')
-    elif output_dir is None:
-        os.mkdir(os.path.join(os.getcwd(), 'outputs'))
-        output_dir = os.path.join(os.getcwd(), 'outputs')
+        os.makedirs(output_dir, exist_ok=True)
 
 
     # Compute total area of the GeoDataFrame (km²)
@@ -215,7 +192,7 @@ def pyflwdir_subbasins_minarea(
                     f"Area cannot exceed basin area ({total_area_km2:.2f} km²)."
                 )
 
-            break  # ✅ valid input
+            break  # valid input
 
         except ValueError as e:
             print(f"Invalid input: {e}")
@@ -359,7 +336,7 @@ def snap_stations(
     points_final = pd.concat([points_inside, points_outside], ignore_index=True)
     points_final = gpd.GeoDataFrame(points_final, crs=target_crs)
 
-    print(f'Stations have been snapped to the target geometry: {len(points_outside)}.')
+    print(f'Stations have been snapped to the target geometry: {len(nearest_geoms)}.')
 
     return points_final
 
@@ -380,14 +357,14 @@ def connect_streams(gdf,
     segm_attr = The index that informs the connected streams
     tolarance = The maximum distance that features may be merged together
     agg_column = The attribute which each connected stream segment will be aggregated on
+    output_dir: Output directory (defaults to ./outputs)
+    file_name: Output filename without extension
     """
 
-    # Check directories
-    if output_dir is None and os.path.isdir(os.path.join(os.getcwd(), 'outputs')):
+    # Setup output directory
+    if output_dir is None:
         output_dir = os.path.join(os.getcwd(), 'outputs')
-    elif output_dir is None:
-        os.mkdir(os.path.join(os.getcwd(), 'outputs'))
-        output_dir = os.path.join(os.getcwd(), 'outputs')
+        os.makedirs(output_dir, exist_ok=True)
         
     # Make a copy
     gdf = gdf.copy()
@@ -486,109 +463,3 @@ def connect_streams(gdf,
 
 
     return result_gdf
-
-
-def analyse_station_density_catchments(gdf_stations : gpd.GeoDataFrame,
-                                       gdf_subbasin : gpd.GeoDataFrame,
-                                       gdf_catchments : gpd.GeoDataFrame,
-                                       gdf_streams : gpd.GeoDataFrame,
-                                       min_strahler_order : int = 6): 
-    
-
-    # Count number of stations within each catchment area
-    gdf_catchments["count_st_cathcm"] = (
-        gpd.sjoin(gdf_stations,
-                gdf_catchments, predicate="within")
-        .groupby("index_right")
-        .size()
-        .reindex(gdf_catchments.index, fill_value=0)
-    )
-
-
-    ### Display results on a Folium MAP - stations and streams styled according to Strahler Order
-    
-    # Build a colormap for Streams, based on Strahler order
-    min_order = gdf_streams["strord"].min()
-    max_order = gdf_streams["strord"].max()
-    strord_cmap = cm.linear.Blues_09.scale(min_order, max_order)
-    strord_cmap.caption = "Strahler Order"
-
-    # Style function for the streams, displayed according to Strahler order
-    def stream_style_function(feature):
-        order = feature["properties"]["strord"]
-
-        return {
-            "color": strord_cmap(order),
-            "weight": order * 0.6,   # scale thickness
-            "opacity": 0.9
-        }
-
-
-    # Build a colormap for catchments, based in the existence or absence of stations on them
-    catch_cmap = cm.linear.RdYlGn_08.scale(0, 1)
-    catch_cmap.caption = "Stations on catchments"
-
-    # Style function for the catchments, displayed according to either having telemetering stations or not
-    def catchment_style_function(feature):
-        has_stations = bool(feature["properties"]["count_st_cathcm"])
-
-        return {
-            "fillColor": catch_cmap(has_stations), # Color the catchments according to the presence or absence of stations
-            "color": "black",
-            "weight": 1,
-            "fillOpacity": 0.5,
-        }
-    
-    # Filter which minimum stream Strahler Order will be displayed
-    gdf_streams = gdf_streams[gdf_streams["strord"] >= min_strahler_order]
-
-    geojson_display_dicts = [
-        {
-            'data' : gdf_stations,
-            'attribute_map':
-            {
-                "codigoestacao": "Station ID",
-                "Operadora_Sigla": "Responsable",
-                "Municipio_Nome": "Municipality"
-            },
-            'feature_settings': {} #Point features, no style_function
-        },
-        {
-            'data' : gdf_subbasin,
-            'attribute_map' :
-            {
-                "DNS_DNB_CD": "Code of the basin",
-                "DNS_NU_SUB": "Code of the sub-basin",
-                "DNS_NM": "Name"
-            },
-            'feature_settings':
-            {
-                "color": "red",
-                "weight": 3,
-                "fill": False
-            }, # Sub-basin feature style
-        },
-        {
-            'data' : gdf_catchments,
-            'attribute_map' :
-            {
-                "value": "#",
-                "area_km2": "Area",
-                "count_st_cathcm": "Station Count"
-            },
-            'feature_settings' : catchment_style_function, # Function to dinamically adjust the color of catchments 
-        },
-        {
-            'data' : gdf_streams,
-            'attribute_map' :
-            {
-                "strord": 'Strahler Order'
-            },
-            'feature_settings' : stream_style_function, # Function to dinamically adjust width and color of streams absed on order 
-        }
-    ]
-
-    # Plots both the filtered stations with data, and the respective sub-basin
-    map = display_Folium_map(geojson_display_dicts)
-
-    return gdf_catchments, map

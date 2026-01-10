@@ -1,1 +1,1 @@
-__all__ = ["catchments_processing"]
+__all__ = ["catchments_processing", "river_network"]

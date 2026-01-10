@@ -20,11 +20,14 @@ def initialize(target_globals):
     # Define the working directory as the same of this python file
     
 
-    target_globals['SCRIPT_DIR'] = os.getcwd()
-    target_globals['OUTPUT_DIR'] = os.path.join(target_globals['SCRIPT_DIR'], 'outputs')
+    target_globals['ROOT_DIR'] = os.path.join(os.getcwd(), 'src')
+    os.chdir(target_globals['ROOT_DIR'])
+    print("Scripting running on current directory: ", os.getcwd())
+
+    target_globals['OUTPUT_DIR'] = os.path.join(target_globals['ROOT_DIR'], 'outputs')
 
     # Define path of local needed data
-    target_globals['SUB_BASINS_PATH'] = os.path.join(target_globals['SCRIPT_DIR'], 'data/hidrosubbasins.geojson')
+    target_globals['SUB_BASINS_PATH'] = os.path.join(target_globals['ROOT_DIR'], 'data/hidrosubbasins.geojson')
 
     # Import functions, libraries and variables in the Utils module
     import utils
@@ -50,4 +53,12 @@ def initialize(target_globals):
             target_globals[name] = getattr(catchments.catchments_processing, name)
 
 
-    print("Scripting running on current directory: ", os.getcwd())
+    # Import functions, libraries and variables in the catchments_processing module
+    import catchments.river_network
+        # Add all public attributes to global namespace
+    for name in dir(catchments.river_network):
+        if not name.startswith('_'):
+            target_globals[name] = getattr(catchments.river_network, name)
+
+
+

@@ -136,7 +136,15 @@ def get_telemstat_subbasin(
     start = 'yyyy-mm-dd' - can filter the first date of update for the data
     end = 'yyyy-mm-dd' - can filter the last date of update for the data
     timeout = time in seconds
+    output_dir: Output directory (defaults to ./outputs)
+    file_name: Output filename without extension
     """
+
+    # Setup output directory
+    if output_dir is None:
+        output_dir = os.path.join(os.getcwd(), 'outputs')
+        os.makedirs(output_dir, exist_ok=True)
+
 
     # Retrieve sub basins in the system, and their respective basin code
     print(f'Attempting to retrieve data for sub-basin {id_subbasin}.')
@@ -333,13 +341,17 @@ def filter_and_save_successfull_flowseries(
     After retrieving all the flow series, filter for only those which actually have data.
     Save the filtered result in a csv.
     Return the geodataframe of this data.
+
+    dict_retrieved_flowseries: output from get_telemstat_flowseries_all()
+    gdf_subbasinstations: GeoDataFrame of target sub-basin being analysed
+    output_dir: Output directory (defaults to ./outputs)
+    file_name: Output filename without extension
     """
 
-    if output_dir is None and os.path.isdir(os.path.join(os.getcwd(), 'outputs')):
+    # Setup output directory
+    if output_dir is None:
         output_dir = os.path.join(os.getcwd(), 'outputs')
-    elif output_dir is None:
-        os.mkdir(os.path.join(os.getcwd(), 'outputs'))
-        output_dir = os.path.join(os.getcwd(), 'outputs')
+        os.makedirs(output_dir, exist_ok=True)
 
     gdf_stats = pd.DataFrame()
 
