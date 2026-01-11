@@ -14,7 +14,6 @@ import rasterio
 from rasterio.io import MemoryFile
 import rioxarray
 import requests
-from utils import *
 
 import rioxarray
 
