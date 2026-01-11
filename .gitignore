@@ -1,7 +1,6 @@
 # Local Folders
 __TEMP/
 .venv/
-__SNIRH
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
