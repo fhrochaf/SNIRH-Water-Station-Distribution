@@ -1,5 +1,6 @@
 import os
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 def initialize(target_globals):
     ##########################
@@ -20,7 +21,7 @@ def initialize(target_globals):
     # Define the working directory as the same of this python file
     
 
-    target_globals['ROOT_DIR'] = os.path.join(os.getcwd(), 'src')
+    target_globals['ROOT_DIR'] = os.path.join(os.path.dirname(__file__))
     os.chdir(target_globals['ROOT_DIR'])
     print("Scripting running on current directory: ", os.getcwd())
 

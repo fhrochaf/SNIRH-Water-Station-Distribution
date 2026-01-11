@@ -106,9 +106,6 @@ def choose_subbasin(SUB_BASINS_PATH):
         if ID_SUBBASIN.lower() == "q":
             return None, None
 
-        print('id subbasin', int(ID_SUBBASIN))
-        print(type(int(ID_SUBBASIN)))
-
         try:
             if int(ID_SUBBASIN) in valid_ids.values:
                 break
@@ -116,7 +113,9 @@ def choose_subbasin(SUB_BASINS_PATH):
             pass
         print("Invalid input. Please try again.")
 
-    return  gdf_subbasins[gdf_subbasins['DNS_NU_SUB'] == int(ID_SUBBASIN)], ID_SUBBASIN
+    gdf_subbasin = gdf_subbasins[gdf_subbasins['DNS_NU_SUB'] == int(ID_SUBBASIN)]
+    print(f'Chosen basin: {ID_SUBBASIN}, {gdf_subbasin['DNS_NM']}')
+    return  gdf_subbasin, ID_SUBBASIN
 
 
 
@@ -451,25 +450,29 @@ def analyse_station_upstream_network(river_net,
                 "opacity": 0.6
             }
             
-        gdf_subgraph = river_net.get_upstream_geodataframe(station,
-                                                        include_station_node=True,
-                                                        include_nodes=False)
-        gdf_subgraph['dwnstream_stat'] = station
+        try:
+            gdf_subgraph = river_net.get_upstream_geodataframe(station,
+                                                            include_station_node=True,
+                                                            include_nodes=False)
+            gdf_subgraph['dwnstream_stat'] = station
 
-        # Add display settings of the subgraph to the display dict
-        geojson_display_dicts.append({
-            'data' : gdf_subgraph,
-            'name' : f'Upstream network of station {station}',
-            'attribute_map' :
-            {
-                "strahler": "Strahler Order",
-                "dwnstream_stat" : "Downstream station"
-            },
-            'feature_settings' : stream_style_fun_subgraph # Function to dinamically adjust width and color of streams absed on order
-        })
+            # Add display settings of the subgraph to the display dict
+            geojson_display_dicts.append({
+                'data' : gdf_subgraph,
+                'name' : f'Upstream network of station {station}',
+                'attribute_map' :
+                {
+                    "strahler": "Strahler Order",
+                    "dwnstream_stat" : "Downstream station"
+                },
+                'feature_settings' : stream_style_fun_subgraph # Function to dinamically adjust width and color of streams absed on order
+            })
 
-        # Add gdf_subgraph to the geodataframe to be returned
-        gdf_station_upstreams = pd.concat([gdf_subgraph, gdf_station_upstreams])
+            # Add gdf_subgraph to the geodataframe to be returned
+            gdf_station_upstreams = pd.concat([gdf_subgraph, gdf_station_upstreams])
+
+        except Exception as e:
+            print(f'Error creating sub-graph of station {station}: {e}.')
 
 
     # Plots both the filtered stations with data, and the respective sub-basin

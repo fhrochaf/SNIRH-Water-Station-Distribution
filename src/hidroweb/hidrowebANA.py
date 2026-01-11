@@ -326,7 +326,6 @@ def get_telemstat_flowseries_all(
     for id in station_codes:
         stations_flow_series[id] = get_telemstat_flowseries(auth, int(id), start, end)
 
-    print(f'From {len(gdf_subbasin_stations)} stations, flow series data retrieved for {len(stations_flow_series)} of them (start={start}, end={end}).')
     return stations_flow_series
 
 

@@ -303,43 +303,126 @@ def pyflwdir_subbasins_minarea(
     return gdf_catchments, gdf_streams
 
 
-def snap_stations(
-    gdf_stations : gpd.GeoDataFrame,
-    gdf_to_snap : gpd.GeoDataFrame):
-    """ Snaps stations to the geometries of target GeoDataFrame
-
-    Creates a 'snapped' flag column to show that the point had its original position adjusted.
+def snap_stations_polyg(
+    gdf_stations: gpd.GeoDataFrame,
+    gdf_to_snap: gpd.GeoDataFrame,
+    max_distance: float = None
+) -> gpd.GeoDataFrame:
+    """Snaps stations to the nearest geometry in target GeoDataFrame.
+    
+    Parameters
+    ----------
+    gdf_stations : gpd.GeoDataFrame
+        GeoDataFrame containing station points to snap
+    gdf_to_snap : gpd.GeoDataFrame
+        GeoDataFrame containing target geometries to snap to
+    max_distance : float, optional
+        Maximum distance (in target CRS units) for snapping. 
+        Points beyond this distance won't be snapped. If None, all points are snapped.
+    
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Stations with snapped geometry and additional columns:
+        - 'snapped': boolean flag indicating if point was moved
+        - 'snap_distance': distance the point was moved (in target CRS units)
     """
-    # Enforce an equal CRS for the GeoDataFrames:
+    # Enforce an equal CRS for the GeoDataFrames
     target_crs = 3857
-
-    points = gdf_stations.to_crs(target_crs)
+    
+    points = gdf_stations.to_crs(target_crs).copy()
     targets = gdf_to_snap.to_crs(target_crs)
-
-    # Check stations that are outside of the basin
+    
+    # Create union of all target geometries
     targets_union = targets.unary_union
-    points_inside = points[points.within(targets_union)]
-    points_inside['snapped'] = False
-    points_outside = points[~points.within(targets_union)]
+    
+    # Find nearest point on target geometries for each station
+    snapped_geoms = []
+    snap_distances = []
+    
+    for point in points.geometry:
+        nearest_point = nearest_points(point, targets_union)[1]
+        snapped_geoms.append(nearest_point)
+        snap_distances.append(point.distance(nearest_point))
+    
+    # Create output GeoDataFrame
+    points['snap_distance'] = snap_distances
+    points['original_geometry'] = points.geometry
+    points['geometry'] = snapped_geoms
+    
+    # Apply max_distance threshold if specified
+    if max_distance is not None:
+        points.loc[points['snap_distance'] > max_distance, 'geometry'] = points.loc[
+            points['snap_distance'] > max_distance, 'original_geometry'
+        ]
+        points['snapped'] = points['snap_distance'] <= max_distance
+        num_snapped = points['snapped'].sum()
+    else:
+        points['snapped'] = points['snap_distance'] > 0
+        num_snapped = points['snapped'].sum()
+    
+    # Drop the temporary original_geometry column
+    points = points.drop(columns=['original_geometry'])
+    
+    print(f'Stations snapped: {num_snapped} out of {len(points)}')
+    
+    return points
 
 
-    if len(points_outside) > 0:
-        # Find neares geometry for the point outside
-        nearest_geoms = []
-        for p in points_outside.geometry:
-            nearest_geoms.append(nearest_points(p, targets_union)[1]) #[1] to return the closest vertex of the geometry 2 (poly_union), which p will be snapped to
-        points_outside = points_outside.copy()
-        points_outside['geometry'] = nearest_geoms
-        points_outside['snapped'] = True
+def snap_stations_streams(
+    gdf_stations: gpd.GeoDataFrame,
+    gdf_to_snap: gpd.GeoDataFrame,
+    tolerance: float = 150  # snapping tolerance in meters
+) -> gpd.GeoDataFrame:
+    """Snaps stations to the nearest geometry in target GeoDataFrame using Shapely's snap.
+    
+    Parameters
+    ----------
+    gdf_stations : gpd.GeoDataFrame
+        GeoDataFrame containing station points to snap
+    gdf_to_snap : gpd.GeoDataFrame
+        GeoDataFrame containing target geometries (e.g., river lines) to snap to
+    tolerance : float, default 1000.0
+        Snapping tolerance (in meters, using CRS 3857). 
+        Points beyond this distance won't be snapped.
+    
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Stations with updated geometry and additional columns:
+        - 'snapped': boolean flag indicating if point was moved
+        - 'snap_distance': distance the point was moved (in meters)
+    """
+    from shapely.ops import snap
+    
+    target_crs = 3857
+    
+    points = gdf_stations.to_crs(target_crs).copy()
+    targets = gdf_to_snap.to_crs(target_crs)
+    
+    targets_union = targets.unary_union
+    
+    # Store original geometries to calculate distances
+    original_geoms = points.geometry.copy()
+    
+    # Snap each point to the target geometries
+    snapped_geoms = [snap(point, targets_union, tolerance) for point in points.geometry]
+    
+    # Calculate snap distances
+    snap_distances = [
+        orig.distance(snapped) 
+        for orig, snapped in zip(original_geoms, snapped_geoms)
+    ]
+    
+    points['snap_distance'] = snap_distances
+    points['geometry'] = snapped_geoms
+    points['snapped'] = points['snap_distance'] > 0.01  # Threshold of 1cm for floating point precision
+    
+    num_snapped = points['snapped'].sum()
+    
+    print(f'Stations snapped: {num_snapped} out of {len(points)}')
 
-    # Merge points outside and inside
-    points_final = pd.concat([points_inside, points_outside], ignore_index=True)
-    points_final = gpd.GeoDataFrame(points_final, crs=target_crs)
-
-    print(f'Stations have been snapped to the target geometry: {len(nearest_geoms)}.')
-
-    return points_final
-
+    return points
 
 
 def connect_streams(gdf,
