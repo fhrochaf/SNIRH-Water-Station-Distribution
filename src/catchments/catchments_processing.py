@@ -54,6 +54,7 @@ def get_dem(bounds, key_opentopo=None,
     print(f"CRS: {crs}")
     print(f"Data range: {data_min:.2f}m to {data_max:.2f}m")
     
+    dem_data = dem_data.squeeze() #Squeeze the raster into shape (x,y)
     # Save if requested
     if save_dem_raster:
         file_path = os.path.join(output_dir, f'{file_name}.tif')
