@@ -10,7 +10,8 @@ import pandas as pd
 import os
 
 def get_access_token(
-        headers: dict = None,
+        ID: str,
+        PWD : str,
         url : str = "https://www.ana.gov.br/hidrowebservice/EstacoesTelemetricas/OAUth/v1",
         timeout: int = 20) -> str:
     """
@@ -18,10 +19,13 @@ def get_access_token(
 
     id = identification number, obtained through the registration
     pwd = password, obtained through the registration
-    headers = parameters for the request
     timeout = time in seconds
     """
-
+    headers = {
+        "accept": "*/*",
+        "Identificador": f"{ID}",
+        "Senha": f"{PWD}"
+    }
 
     print('Attempting connection to the API.')
     try:

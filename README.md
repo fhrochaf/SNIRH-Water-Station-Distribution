@@ -71,7 +71,6 @@ The package will automatically install required dependencies including:
 - `networkx` - Graph analysis
 - `folium` - Interactive mapping
 - `requests` - API communication
-- `python-dotenv` - Environment configuration
 
 See `requirements.txt` for the complete list.
 
@@ -79,9 +78,7 @@ See `requirements.txt` for the complete list.
 
 ### API Credentials
 
-Create a `config.env` file in the `/src` directory:
-
-```env
+```bash
 # HidroWeb API Credentials
 ID_SNIRH=your_snirh_id
 PWD_SNIRH=your_snirh_password
@@ -262,7 +259,6 @@ Contains SRTM DEMs for all Brazilian sub-basins, projected to EPSG:3857.
 SNIRH-Water-Station-Distribution/
 ├── src/
 │   ├── __init__.py              # Package initialization and imports
-│   ├── config.env               # API credentials (create this)
 │   ├── utils.py                 # Utility functions
 │   ├── data/
 │   │   └── hidrosubbasins.geojson  # Brazilian sub-basins geometries
@@ -291,7 +287,6 @@ pyflwdir
 networkx
 folium
 requests
-python-dotenv
 matplotlib
 seaborn
 numpy

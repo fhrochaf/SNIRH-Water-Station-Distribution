@@ -2,18 +2,6 @@ import os
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# User must provide the credentials for HidroWeb access in the config.env file.
-ID_SNIRH = os.getenv('ID_SNIRH') 
-PWD_SNIRH = os.getenv('PWD_SNIRH')
-
-# User must provide the credentials for OpenTopography access in the config.env file
-KEY_OPEN_TOPOGRAPHY = os.getenv('KEY_OPEN_TOPOGRAPHY') 
-# Alternativelly, DEM's within the bounding-box of each brazilian sub-basin are available in
-# https://drive.google.com/drive/folders/1c_NcoKtEFZkNS9EsjcDbT4IeXCWQCbMT?usp=drive_link
 
 # Define paths
 ROOT_DIR = os.path.dirname(__file__)
