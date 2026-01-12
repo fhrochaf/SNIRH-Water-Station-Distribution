@@ -62,6 +62,9 @@ The toolkit combines hydrological data retrieval with geospatial processing to:
 git clone https://github.com/fhrochaf/SNIRH-Water-Station-Distribution.git
 cd SNIRH-Water-Station-Distribution
 
+# Install the package
+pip install .
+
 ### Dependencies
 
 The package will automatically install required dependencies including:
